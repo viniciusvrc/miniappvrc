@@ -3,183 +3,127 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat com Luna (Voz)</title>
+    <title>Boneco dos Peidos 😂</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
             height: 100vh;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
             display: flex;
             flex-direction: column;
-            background: #fdf6ff;
+            align-items: center;
+            justify-content: center;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
         }
-        #header {
-            text-align: center;
-            padding: 20px;
-            background: #ff8acd;
+        #title {
+            font-size: 2em;
             color: white;
-            font-size: 1.2em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
         }
-        #chat {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-        }
-        .message {
-            max-width: 80%;
-            padding: 12px;
-            border-radius: 18px;
-            margin: 6px 0;
-            word-wrap: break-word;
-        }
-        .user {
-            align-self: flex-end;
-            background: #a8e6cf;
-            color: black;
-        }
-        .bot {
-            align-self: flex-start;
-            background: white;
-            border: 1px solid #ff8acd;
-            color: black;
-        }
-        #input-area {
-            display: flex;
-            padding: 10px;
-            background: white;
-            border-top: 1px solid #eee;
-        }
-        #message-input {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            font-size: 16px;
-        }
-        #send-btn {
-            margin-left: 10px;
-            padding: 0 20px;
-            background: #ff8acd;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            font-size: 16px;
+        #boneco {
+            font-size: 20em; /* Muito grande */
             cursor: pointer;
+            user-select: none;
+            transition: transform 0.1s;
+        }
+        #boneco:active {
+            transform: scale(0.95);
+        }
+        #contador {
+            position: absolute;
+            top: 20px;
+            font-size: 1.5em;
+            color: white;
+            background: rgba(0,0,0,0.3);
+            padding: 10px 20px;
+            border-radius: 20px;
+        }
+        @keyframes shake {
+            0% { transform: translate(0); }
+            25% { transform: translate(-10px, 10px); }
+            50% { transform: translate(10px, -10px); }
+            75% { transform: translate(-10px, -10px); }
+            100% { transform: translate(0); }
+        }
+        .shake {
+            animation: shake 0.5s;
         }
     </style>
 </head>
 <body>
-    <div id="header">
-        <h1>Luna 🎎 (Fala!)</h1>
-        <p>Converse comigo — eu respondo em voz!</p>
-    </div>
-    <div id="chat"></div>
-    <div id="input-area">
-        <input type="text" id="message-input" placeholder="Digite sua mensagem..." autocomplete="off" />
-        <button id="send-btn">Enviar</button>
-    </div>
+    <div id="contador">Peidos soltos: <span id="count">0</span></div>
+    <div id="title">Toque no boneco! 💨</div>
+    <div id="boneco">🧔</div>
 
     <script>
-        // Telegram Mini App
+        // Telegram Mini App (tela cheia + vibração)
         if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
         }
 
-        const chat = document.getElementById('chat');
-        const input = document.getElementById('message-input');
-        const userName = (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.initDataUnsafe.user)
-            ? Telegram.WebApp.initDataUnsafe.user.first_name || "Amigo"
-            : "Amigo";
+        const boneco = document.getElementById('boneco');
+        const countEl = document.getElementById('count');
+        let count = 0;
 
-        function addMessage(text, sender) {
-            const div = document.createElement('div');
-            div.classList.add('message', sender);
-            div.textContent = text;
-            chat.appendChild(div);
-            chat.scrollTop = chat.scrollHeight;
-        }
+        // Array com variações de peidos (diferentes frequências, durações e tipos de onda)
+        const peidos = [
+            { freqStart: 180, freqEnd: 60, duration: 0.6, type: 'sawtooth', volume: 0.8 },  // Peido longo e grave
+            { freqStart: 250, freqEnd: 80, duration: 0.4, type: 'square', volume: 1 },      // Peido curto e agudo
+            { freqStart: 150, freqEnd: 40, duration: 1.0, type: 'sawtooth', volume: 0.7 }, // Peido bem longo
+            { freqStart: 300, freqEnd: 100, duration: 0.3, type: 'triangle', volume: 0.9 },// Peido rápido
+            { freqStart: 200, freqEnd: 50, duration: 0.7, type: 'sine', volume: 0.6 },     // Peido "molhado"
+            { freqStart: 220, freqEnd: 70, duration: 0.5, type: 'square', volume: 1 },     // Peido clássico
+            { freqStart: 170, freqEnd: 30, duration: 0.8, type: 'sawtooth', volume: 0.85 } // Peido épico
+        ];
 
-        function speak(text) {
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'pt-BR'; // Português brasileiro
-                utterance.rate = 1;
-                utterance.pitch = 1.2;
-                utterance.volume = 1;
+        function playRandomFart() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const randomPeido = peidos[Math.floor(Math.random() * peidos.length)];
 
-                // Vibração leve ao falar
-                if (typeof Telegram !== 'undefined' && Telegram.WebApp.HapticFeedback) {
-                    Telegram.WebApp.HapticFeedback.impactOccurred('light');
-                }
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = randomPeido.type;
+            oscillator.frequency.setValueAtTime(randomPeido.freqStart, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(randomPeido.freqEnd, audioCtx.currentTime + randomPeido.duration);
 
-                speechSynthesis.speak(utterance);
-            } else {
-                alert('Seu navegador não suporta voz. Use Chrome ou o app do Telegram no Android/iOS.');
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(randomPeido.volume, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + randomPeido.duration);
+
+            oscillator.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + randomPeido.duration);
+
+            // Vibração no Telegram
+            if (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.HapticFeedback) {
+                Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
             }
         }
 
-        function getResponse(text) {
-            const lower = text.toLowerCase();
-            let response = '';
+        function tocarBoneco() {
+            count++;
+            countEl.textContent = count;
 
-            if (/bonita|linda|fofa|gosto|amo|adoro|legal|divertid[ao]|maravilhosa|perfeita/.test(lower)) {
-                const positives = [
-                    'Aww, você é tão gentil! 😘',
-                    'Isso me deixa tão feliz! 💕',
-                    'Meu coração está batendo mais rápido agora! ❤️',
-                    'Obrigada! Você é incrível! 🌸'
-                ];
-                response = positives[Math.floor(Math.random() * positives.length)];
-            } else if (/feia|chata|odeio|ruim|horrível|idiota|burra/.test(lower)) {
-                const negatives = [
-                    'Isso me machucou muito... 😢',
-                    'Por que você disse isso? 💔',
-                    'Estou triste agora...'
-                ];
-                response = negatives[Math.floor(Math.random() * negatives.length)];
-            } else {
-                const neutrals = [
-                    'Humm, interessante!',
-                    'Conte mais sobre isso! 😊',
-                    'Haha, engraçado! 😂',
-                    'O que você acha disso?',
-                    'Adoro conversar com você!',
-                    '🌟 Legal!'
-                ];
-                response = neutrals[Math.floor(Math.random() * neutrals.length)];
-            }
+            // Animação de tremor
+            boneco.classList.add('shake');
+            setTimeout(() => boneco.classList.remove('shake'), 500);
 
-            return response;
+            // Toca um peido diferente a cada vez
+            playRandomFart();
         }
 
-        function sendMessage() {
-            const text = input.value.trim();
-            if (!text) return;
-
-            addMessage(text, 'user');
-            input.value = '';
-
-            setTimeout(() => {
-                const response = getResponse(text);
-                addMessage(response, 'bot');
-                speak(response); // Fala automaticamente
-            }, 800 + Math.random() * 700);
-        }
-
-        document.getElementById('send-btn').onclick = sendMessage;
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+        // Suporte a toque e clique
+        boneco.addEventListener('click', tocarBoneco);
+        boneco.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            tocarBoneco();
         });
-
-        // Mensagem inicial com voz
-        const initial = `Oi ${userName}! Eu sou a Luna e agora falo com você! 😊`;
-        addMessage(initial, 'bot');
-        speak(initial);
     </script>
 </body>
 </html>
