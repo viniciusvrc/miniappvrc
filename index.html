@@ -1,24 +1,107 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="pt">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clicker Infinito</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {
+        body {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            overflow: hidden;
         }
-
-        body {
-            font-family: 'Montserrat', sans-serif;
-            font-weight: 200;
+        h1 {
+            font-size: 2em;
+            margin: 10px;
+        }
+        #username {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        #score {
+            font-size: 5em;
+            font-weight: bold;
+            margin: 30px 0;
+        }
+        #click-button {
+            font-size: 8em;
+            cursor: pointer;
+            user-select: none;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        #reset-btn {
+            margin-top: 40px;
+            padding: 10px 20px;
+            font-size: 1.2em;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            border-radius: 20px;
+            color: white;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <p>Site for MiniApp testing is live!</p>
+    <h1>Clicker Infinito</h1>
+    <div id="username"></div>
+    <div id="score">0</div>
+    <div id="click-button">👆</div>
+    <button id="reset-btn">Zerar Pontos</button>
+
+    <script>
+        // Inicializa o Mini App do Telegram
+        if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+        }
+
+        // Pega o nome do usuário
+        const userName = (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.initDataUnsafe.user)
+            ? Telegram.WebApp.initDataUnsafe.user.first_name || "Jogador"
+            : "Jogador";
+
+        document.getElementById('username').textContent = `Olá, ${userName}!`;
+
+        // Carrega ou inicia o score (salva no dispositivo)
+        let score = parseInt(localStorage.getItem('clickerScore') || '0');
+        const scoreEl = document.getElementById('score');
+        scoreEl.textContent = score;
+
+        const clickButton = document.getElementById('click-button');
+
+        // Clique principal
+        clickButton.addEventListener('click', () => {
+            score++;
+            scoreEl.textContent = score;
+            localStorage.setItem('clickerScore', score);
+
+            // Feedback háptico (vibração leve)
+            if (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.HapticFeedback) {
+                Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            }
+        });
+
+        // Botão de zerar
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            score = 0;
+            scoreEl.textContent = score;
+            localStorage.setItem('clickerScore', score);
+        });
+    </script>
 </body>
 </html>
