@@ -3,271 +3,183 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bubble Shooter</title>
+    <title>Chat com Luna (Voz)</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; overflow: hidden; }
-        canvas { display: block; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #fdf6ff;
+        }
+        #header {
+            text-align: center;
+            padding: 20px;
+            background: #ff8acd;
+            color: white;
+            font-size: 1.2em;
+        }
+        #chat {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .message {
+            max-width: 80%;
+            padding: 12px;
+            border-radius: 18px;
+            margin: 6px 0;
+            word-wrap: break-word;
+        }
+        .user {
+            align-self: flex-end;
+            background: #a8e6cf;
+            color: black;
+        }
+        .bot {
+            align-self: flex-start;
+            background: white;
+            border: 1px solid #ff8acd;
+            color: black;
+        }
+        #input-area {
+            display: flex;
+            padding: 10px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+        #message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 16px;
+        }
+        #send-btn {
+            margin-left: 10px;
+            padding: 0 20px;
+            background: #ff8acd;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
-    <canvas id="game"></canvas>
+    <div id="header">
+        <h1>Luna 🎎 (Fala!)</h1>
+        <p>Converse comigo — eu respondo em voz!</p>
+    </div>
+    <div id="chat"></div>
+    <div id="input-area">
+        <input type="text" id="message-input" placeholder="Digite sua mensagem..." autocomplete="off" />
+        <button id="send-btn">Enviar</button>
+    </div>
 
     <script>
+        // Telegram Mini App
         if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
         }
 
-        const canvas = document.getElementById('game');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        const ctx = canvas.getContext('2d');
+        const chat = document.getElementById('chat');
+        const input = document.getElementById('message-input');
+        const userName = (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.initDataUnsafe.user)
+            ? Telegram.WebApp.initDataUnsafe.user.first_name || "Amigo"
+            : "Amigo";
 
-        const GRID_SIZE = Math.min(canvas.width / 10, 50);
-        const RADIUS = GRID_SIZE / 2 - 2;
-        const WALL = RADIUS;
-        const ROW_HEIGHT = GRID_SIZE * 0.866;
-        const COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
-
-        let bubbles = [];
-        let shooterBubble = null;
-        let nextColor = getRandomColor();
-        let angle = 0;
-        let score = 0;
-        let gameOver = false;
-
-        function getRandomColor() {
-            return COLORS[Math.floor(Math.random() * COLORS.length)];
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.classList.add('message', sender);
+            div.textContent = text;
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
         }
 
-        function createBubble(row, col, color = null) {
-            if (color === null) color = getRandomColor();
-            const x = WALL + col * GRID_SIZE + (row % 2 === 1 ? GRID_SIZE / 2 : 0) + RADIUS;
-            const y = WALL + row * ROW_HEIGHT + RADIUS;
-            bubbles.push({ row, col, x, y, color, active: true });
-        }
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'pt-BR'; // Português brasileiro
+                utterance.rate = 1;
+                utterance.pitch = 1.2;
+                utterance.volume = 1;
 
-        // Inicializa grade com 8 linhas
-        for (let row = 0; row < 8; row++) {
-            const cols = row % 2 === 0 ? 10 : 9;
-            for (let col = 0; col < cols; col++) {
-                createBubble(row, col);
-            }
-        }
-
-        function createShooterBubble() {
-            shooterBubble = {
-                x: canvas.width / 2,
-                y: canvas.height - WALL - RADIUS * 2,
-                color: nextColor,
-                vx: 0,
-                vy: 0
-            };
-            nextColor = getRandomColor();
-        }
-
-        createShooterBubble();
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Desenha bolhas
-            bubbles.filter(b => b.active).forEach(b => {
-                ctx.fillStyle = b.color;
-                ctx.beginPath();
-                ctx.arc(b.x, b.y, RADIUS, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Desenha bolha no canhão
-            if (shooterBubble && shooterBubble.vx === 0) {
-                ctx.fillStyle = shooterBubble.color;
-                ctx.beginPath();
-                ctx.arc(shooterBubble.x, shooterBubble.y, RADIUS, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Mira (linha)
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(shooterBubble.x, shooterBubble.y);
-                ctx.lineTo(shooterBubble.x + Math.cos(angle) * 100, shooterBubble.y + Math.sin(angle) * 100);
-                ctx.stroke();
-            }
-
-            // Pontuação
-            ctx.fillStyle = 'white';
-            ctx.font = '30px Arial';
-            ctx.fillText(`Pontos: ${score}`, 20, 50);
-
-            if (gameOver) {
-                ctx.fillStyle = 'rgba(0,0,0,0.7)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = 'white';
-                ctx.font = '50px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2 - 50);
-                ctx.font = '30px Arial';
-                ctx.fillText(`Pontuação Final: ${score}`, canvas.width / 2, canvas.height / 2 + 50);
-            }
-        }
-
-        function update() {
-            if (gameOver) return;
-
-            if (shooterBubble.vx !== 0 || shooterBubble.vy !== 0) {
-                shooterBubble.x += shooterBubble.vx;
-                shooterBubble.y += shooterBubble.vy;
-
-                // Colisão com paredes
-                if (shooterBubble.x - RADIUS < WALL || shooterBubble.x + RADIUS > canvas.width - WALL) {
-                    shooterBubble.vx *= -1;
+                // Vibração leve ao falar
+                if (typeof Telegram !== 'undefined' && Telegram.WebApp.HapticFeedback) {
+                    Telegram.WebApp.HapticFeedback.impactOccurred('light');
                 }
 
-                // Colisão com topo
-                if (shooterBubble.y - RADIUS < WALL) {
-                    snapBubble();
-                }
-
-                // Colisão com outras bolhas
-                for (let b of bubbles) {
-                    if (b.active && Math.hypot(shooterBubble.x - b.x, shooterBubble.y - b.y) < RADIUS * 2) {
-                        snapBubble();
-                        break;
-                    }
-                }
-
-                // Game over se passar do fundo
-                if (shooterBubble.y > canvas.height) {
-                    gameOver = true;
-                }
-            }
-
-            // Verifica se alguma bolha chegou ao fundo
-            if (bubbles.some(b => b.active && b.y + RADIUS > canvas.height - WALL)) {
-                gameOver = true;
-            }
-        }
-
-        function snapBubble() {
-            // Encontra posição mais próxima na grade
-            let closest = null;
-            let minDist = Infinity;
-            const testRow = Math.round((shooterBubble.y - WALL - RADIUS) / ROW_HEIGHT);
-            const cols = testRow % 2 === 0 ? 10 : 9;
-
-            for (let col = 0; col < cols; col++) {
-                const testX = WALL + col * GRID_SIZE + (testRow % 2 === 1 ? GRID_SIZE / 2 : 0) + RADIUS;
-                const testY = WALL + testRow * ROW_HEIGHT + RADIUS;
-                const dist = Math.hypot(shooterBubble.x - testX, shooterBubble.y - testY);
-                const occupied = bubbles.some(b => b.active && b.row === testRow && b.col === col);
-                if (dist < minDist && !occupied) {
-                    minDist = dist;
-                    closest = { row: testRow, col };
-                }
-            }
-
-            if (closest) {
-                createBubble(closest.row, closest.col, shooterBubble.color);
-                checkMatches();
-                createShooterBubble();
+                speechSynthesis.speak(utterance);
             } else {
-                gameOver = true;
+                alert('Seu navegador não suporta voz. Use Chrome ou o app do Telegram no Android/iOS.');
             }
         }
 
-        function checkMatches() {
-            // Encontra clusters (flood fill simples)
-            const visited = new Set();
-            let totalPopped = 0;
+        function getResponse(text) {
+            const lower = text.toLowerCase();
+            let response = '';
 
-            for (let b of bubbles) {
-                if (!b.active || visited.has(b)) continue;
-
-                const cluster = [];
-                const queue = [b];
-                visited.add(b);
-
-                while (queue.length) {
-                    const current = queue.pop();
-                    cluster.push(current);
-
-                    // Vizinhos (aproximado para hex)
-                    const neighbors = bubbles.filter(n => n.active && !visited.has(n) &&
-                        Math.hypot(n.x - current.x, n.y - current.y) < GRID_SIZE);
-
-                    for (let n of neighbors) {
-                        if (n.color === b.color) {
-                            queue.push(n);
-                            visited.add(n);
-                        }
-                    }
-                }
-
-                if (cluster.length >= 3) {
-                    cluster.forEach(c => c.active = false);
-                    totalPopped += cluster.length;
-                }
+            if (/bonita|linda|fofa|gosto|amo|adoro|legal|divertid[ao]|maravilhosa|perfeita/.test(lower)) {
+                const positives = [
+                    'Aww, você é tão gentil! 😘',
+                    'Isso me deixa tão feliz! 💕',
+                    'Meu coração está batendo mais rápido agora! ❤️',
+                    'Obrigada! Você é incrível! 🌸'
+                ];
+                response = positives[Math.floor(Math.random() * positives.length)];
+            } else if (/feia|chata|odeio|ruim|horrível|idiota|burra/.test(lower)) {
+                const negatives = [
+                    'Isso me machucou muito... 😢',
+                    'Por que você disse isso? 💔',
+                    'Estou triste agora...'
+                ];
+                response = negatives[Math.floor(Math.random() * negatives.length)];
+            } else {
+                const neutrals = [
+                    'Humm, interessante!',
+                    'Conte mais sobre isso! 😊',
+                    'Haha, engraçado! 😂',
+                    'O que você acha disso?',
+                    'Adoro conversar com você!',
+                    '🌟 Legal!'
+                ];
+                response = neutrals[Math.floor(Math.random() * neutrals.length)];
             }
 
-            if (totalPopped > 0) {
-                score += totalPopped * 10;
-                dropFloating();
-            }
+            return response;
         }
 
-        function dropFloating() {
-            // Bolhas conectadas ao topo ficam, outras caem (simplificado)
-            const connected = new Set();
-            const topBubbles = bubbles.filter(b => b.active && b.row === 0);
-            const queue = [...topBubbles];
+        function sendMessage() {
+            const text = input.value.trim();
+            if (!text) return;
 
-            while (queue.length) {
-                const current = queue.pop();
-                if (connected.has(current)) continue;
-                connected.add(current);
+            addMessage(text, 'user');
+            input.value = '';
 
-                const neighbors = bubbles.filter(n => n.active && Math.hypot(n.x - current.x, n.y - current.y) < GRID_SIZE);
-                queue.push(...neighbors);
-            }
-
-            const dropped = bubbles.filter(b => b.active && !connected.has(b));
-            dropped.forEach(b => b.active = false);
-            score += dropped.length * 20;
+            setTimeout(() => {
+                const response = getResponse(text);
+                addMessage(response, 'bot');
+                speak(response); // Fala automaticamente
+            }, 800 + Math.random() * 700);
         }
 
-        function handleAim(e) {
-            if (gameOver) return;
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-            const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-            angle = Math.atan2(y - shooterBubble.y, x - shooterBubble.x);
-        }
+        document.getElementById('send-btn').onclick = sendMessage;
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
 
-        function shoot(e) {
-            if (gameOver || shooterBubble.vx !== 0) return;
-            const speed = 12;
-            shooterBubble.vx = speed * Math.cos(angle);
-            shooterBubble.vy = speed * Math.sin(angle);
-
-            if (typeof Telegram !== 'undefined' && Telegram.WebApp.HapticFeedback) {
-                Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-            }
-        }
-
-        canvas.addEventListener('mousemove', handleAim);
-        canvas.addEventListener('touchmove', handleAim);
-        canvas.addEventListener('click', shoot);
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); shoot(e); handleAim(e); });
-
-        function loop() {
-            update();
-            draw();
-            requestAnimationFrame(loop);
-        }
-
-        loop();
+        // Mensagem inicial com voz
+        const initial = `Oi ${userName}! Eu sou a Luna e agora falo com você! 😊`;
+        addMessage(initial, 'bot');
+        speak(initial);
     </script>
 </body>
 </html>
