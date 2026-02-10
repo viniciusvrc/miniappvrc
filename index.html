@@ -3,105 +3,221 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Clicker Infinito</title>
+    <title>Zuma Simples</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            font-family: Arial, sans-serif;
-            text-align: center;
-            overflow: hidden;
-        }
-        h1 {
-            font-size: 2em;
-            margin: 10px;
-        }
-        #username {
-            font-size: 1.5em;
-            margin-bottom: 20px;
-        }
-        #score {
-            font-size: 5em;
-            font-weight: bold;
-            margin: 30px 0;
-        }
-        #click-button {
-            font-size: 8em;
-            cursor: pointer;
-            user-select: none;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-        #reset-btn {
-            margin-top: 40px;
-            padding: 10px 20px;
-            font-size: 1.2em;
-            background: rgba(255,255,255,0.2);
-            border: 2px solid white;
-            border-radius: 20px;
-            color: white;
-            cursor: pointer;
-        }
+        body { margin: 0; padding: 0; background: #001000; overflow: hidden; }
+        canvas { display: block; margin: 0 auto; background: #112200; box-shadow: 0 0 30px black; }
     </style>
 </head>
 <body>
-    <h1>Clicker Infinito</h1>
-    <div id="username"></div>
-    <div id="score">0</div>
-    <div id="click-button">👆</div>
-    <button id="reset-btn">Zerar Pontos</button>
+    <canvas id="c1"></canvas>
 
     <script>
-        // Inicializa o Mini App do Telegram
+        // Telegram Mini App
         if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
         }
 
-        // Pega o nome do usuário
-        const userName = (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.initDataUnsafe.user)
-            ? Telegram.WebApp.initDataUnsafe.user.first_name || "Jogador"
-            : "Jogador";
+        const canvas = document.getElementById('c1');
+        canvas.width = window.innerWidth > 800 ? 800 : window.innerWidth;
+        canvas.height = window.innerHeight > 800 ? 800 : window.innerHeight;
+        const oGC = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const centerX = width / 2;
+        const centerY = height / 2 + 50; // ajuste para ficar melhor
 
-        document.getElementById('username').textContent = `Olá, ${userName}!`;
+        const hDu = Math.PI / 180;
+        const colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple'];
+        let balls = [];
+        let bullets = [];
+        let score = 0;
+        let iRotate = -Math.PI / 2; // aponta para cima inicialmente
 
-        // Carrega ou inicia o score (salva no dispositivo)
-        let score = parseInt(localStorage.getItem('clickerScore') || '0');
-        const scoreEl = document.getElementById('score');
-        scoreEl.textContent = score;
+        // Função para pegar posição de mouse/touch
+        function getPos(ev) {
+            const rect = canvas.getBoundingClientRect();
+            const touch = ev.touches ? ev.touches[0] : ev;
+            return {
+                x: touch.clientX - rect.left,
+                y: touch.clientY - rect.top
+            };
+        }
 
-        const clickButton = document.getElementById('click-button');
+        // Rotação do sapo
+        function updateRotation(ev) {
+            ev.preventDefault();
+            const pos = getPos(ev);
+            const a = pos.x - centerX;
+            const b = pos.y - centerY;
+            iRotate = Math.atan2(b, a);
+        }
 
-        // Clique principal
-        clickButton.addEventListener('click', () => {
-            score++;
-            scoreEl.textContent = score;
-            localStorage.setItem('clickerScore', score);
+        canvas.onmousemove = canvas.ontouchmove = updateRotation;
 
-            // Feedback háptico (vibração leve)
-            if (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.HapticFeedback) {
-                Telegram.WebApp.HapticFeedback.impactOccurred('light');
+        // Tiro
+        function shoot(ev) {
+            ev.preventDefault();
+            const pos = getPos(ev);
+            const a = pos.x - centerX;
+            const b = pos.y - centerY;
+            const c = Math.sqrt(a * a + b * b);
+            if (c === 0) return;
+
+            const speed = 10;
+            const sX = speed * a / c;
+            const sY = speed * b / c;
+            const col = colors[Math.floor(Math.random() * colors.length)];
+
+            bullets.push({
+                x: centerX,
+                y: centerY,
+                sX: sX,
+                sY: sY,
+                color: col
+            });
+
+            // Vibração no Telegram
+            if (typeof Telegram !== 'undefined' && Telegram.WebApp.HapticFeedback) {
+                Telegram.WebApp.HapticFeedback.impactOccurred('medium');
             }
-        });
+        }
 
-        // Botão de zerar
-        document.getElementById('reset-btn').addEventListener('click', () => {
-            score = 0;
-            scoreEl.textContent = score;
-            localStorage.setItem('clickerScore', score);
-        });
+        canvas.onmousedown = canvas.ontouchstart = shoot;
+
+        // Adiciona bolas
+        setInterval(() => {
+            const col = colors[Math.floor(Math.random() * colors.length)];
+            balls.push({
+                x: centerX,
+                y: 0,
+                r: 200,
+                num: 0,
+                startX: centerX,
+                startY: 0,
+                color: col
+            });
+        }, 1500);
+
+        // Desenho e animação
+        function draw() {
+            oGC.clearRect(0, 0, width, height);
+
+            // Caminho (curva)
+            oGC.strokeStyle = '#335533';
+            oGC.lineWidth = 50;
+            oGC.beginPath();
+            oGC.arc(centerX, centerY, 220, -90 * hDu, 180 * hDu, false);
+            oGC.stroke();
+            oGC.beginPath();
+            oGC.arc(centerX - 50, centerY, 150, 180 * hDu, 360 * hDu, false);
+            oGC.stroke();
+
+            // Buraco final
+            oGC.fillStyle = 'black';
+            oGC.beginPath();
+            oGC.arc(centerX + 150, centerY, 40, 0, Math.PI * 2);
+            oGC.fill();
+
+            // Bolas
+            for (let i = 0; i < balls.length; i++) {
+                oGC.fillStyle = balls[i].color;
+                oGC.beginPath();
+                oGC.arc(balls[i].x, balls[i].y, 20, 0, Math.PI * 2);
+                oGC.fill();
+            }
+
+            // Sapo
+            oGC.save();
+            oGC.translate(centerX, centerY);
+            oGC.rotate(iRotate);
+            // Corpo
+            oGC.fillStyle = '#228B22';
+            oGC.beginPath();
+            oGC.ellipse(0, 10, 40, 30, 0, 0, Math.PI * 2);
+            oGC.fill();
+            // Cabeça
+            oGC.fillStyle = '#32CD32';
+            oGC.beginPath();
+            oGC.arc(0, 0, 35, 0, Math.PI * 2);
+            oGC.fill();
+            // Olhos
+            oGC.fillStyle = 'white';
+            oGC.beginPath();
+            oGC.arc(-12, -10, 10, 0, Math.PI * 2);
+            oGC.arc(12, -10, 10, 0, Math.PI * 2);
+            oGC.fill();
+            oGC.fillStyle = 'black';
+            oGC.beginPath();
+            oGC.arc(-12, -10, 5, 0, Math.PI * 2);
+            oGC.arc(12, -10, 5, 0, Math.PI * 2);
+            oGC.fill();
+            // Boca
+            oGC.strokeStyle = 'black';
+            oGC.lineWidth = 3;
+            oGC.beginPath();
+            oGC.arc(0, 10, 20, 0, Math.PI, false);
+            oGC.stroke();
+            oGC.restore();
+
+            // Projéteis
+            for (let i = 0; i < bullets.length; i++) {
+                oGC.fillStyle = bullets[i].color;
+                oGC.beginPath();
+                oGC.arc(bullets[i].x, bullets[i].y, 20, 0, Math.PI * 2);
+                oGC.fill();
+            }
+
+            // Pontuação
+            oGC.fillStyle = 'white';
+            oGC.font = '30px Arial';
+            oGC.fillText('Pontos: ' + score, 20, 50);
+            oGC.fillText('Zuma Simples', width / 2 - 100, height - 20);
+        }
+
+        // Movimento e colisão
+        setInterval(() => {
+            // Mover bolas
+            for (let i = 0; i < balls.length; i++) {
+                balls[i].num++;
+                if (balls[i].num === 270) {
+                    balls[i].r = 150;
+                    balls[i].startX = centerX - 50;
+                    balls[i].startY = centerY - 150;
+                }
+                if (balls[i].num >= 450) {
+                    alert('Game Over!\nPontos finais: ' + score);
+                    location.reload();
+                }
+                balls[i].x = Math.sin(balls[i].num * hDu) * balls[i].r + balls[i].startX;
+                balls[i].y = balls[i].r - Math.cos(balls[i].num * hDu) * balls[i].r + balls[i].startY;
+            }
+
+            // Mover projéteis
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].sX;
+                bullets[i].y += bullets[i].sY;
+
+                // Colisão com bolas
+                for (let j = balls.length - 1; j >= 0; j--) {
+                    const dx = bullets[i].x - balls[j].x;
+                    const dy = bullets[i].y - balls[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 40) {
+                        if (bullets[i].color === balls[j].color) {
+                            balls.splice(j, 1);
+                            score += 20;
+                        }
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }, 30);
+
+        setInterval(draw, 1000 / 60);
     </script>
 </body>
 </html>
