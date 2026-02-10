@@ -3,221 +3,271 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Zuma Simples</title>
+    <title>Bubble Shooter</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #001000; overflow: hidden; }
-        canvas { display: block; margin: 0 auto; background: #112200; box-shadow: 0 0 30px black; }
+        body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
-    <canvas id="c1"></canvas>
+    <canvas id="game"></canvas>
 
     <script>
-        // Telegram Mini App
         if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
         }
 
-        const canvas = document.getElementById('c1');
-        canvas.width = window.innerWidth > 800 ? 800 : window.innerWidth;
-        canvas.height = window.innerHeight > 800 ? 800 : window.innerHeight;
-        const oGC = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-        const centerX = width / 2;
-        const centerY = height / 2 + 50; // ajuste para ficar melhor
+        const canvas = document.getElementById('game');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const ctx = canvas.getContext('2d');
 
-        const hDu = Math.PI / 180;
-        const colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple'];
-        let balls = [];
-        let bullets = [];
+        const GRID_SIZE = Math.min(canvas.width / 10, 50);
+        const RADIUS = GRID_SIZE / 2 - 2;
+        const WALL = RADIUS;
+        const ROW_HEIGHT = GRID_SIZE * 0.866;
+        const COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
+
+        let bubbles = [];
+        let shooterBubble = null;
+        let nextColor = getRandomColor();
+        let angle = 0;
         let score = 0;
-        let iRotate = -Math.PI / 2; // aponta para cima inicialmente
+        let gameOver = false;
 
-        // Função para pegar posição de mouse/touch
-        function getPos(ev) {
-            const rect = canvas.getBoundingClientRect();
-            const touch = ev.touches ? ev.touches[0] : ev;
-            return {
-                x: touch.clientX - rect.left,
-                y: touch.clientY - rect.top
+        function getRandomColor() {
+            return COLORS[Math.floor(Math.random() * COLORS.length)];
+        }
+
+        function createBubble(row, col, color = null) {
+            if (color === null) color = getRandomColor();
+            const x = WALL + col * GRID_SIZE + (row % 2 === 1 ? GRID_SIZE / 2 : 0) + RADIUS;
+            const y = WALL + row * ROW_HEIGHT + RADIUS;
+            bubbles.push({ row, col, x, y, color, active: true });
+        }
+
+        // Inicializa grade com 8 linhas
+        for (let row = 0; row < 8; row++) {
+            const cols = row % 2 === 0 ? 10 : 9;
+            for (let col = 0; col < cols; col++) {
+                createBubble(row, col);
+            }
+        }
+
+        function createShooterBubble() {
+            shooterBubble = {
+                x: canvas.width / 2,
+                y: canvas.height - WALL - RADIUS * 2,
+                color: nextColor,
+                vx: 0,
+                vy: 0
             };
+            nextColor = getRandomColor();
         }
 
-        // Rotação do sapo
-        function updateRotation(ev) {
-            ev.preventDefault();
-            const pos = getPos(ev);
-            const a = pos.x - centerX;
-            const b = pos.y - centerY;
-            iRotate = Math.atan2(b, a);
-        }
+        createShooterBubble();
 
-        canvas.onmousemove = canvas.ontouchmove = updateRotation;
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Tiro
-        function shoot(ev) {
-            ev.preventDefault();
-            const pos = getPos(ev);
-            const a = pos.x - centerX;
-            const b = pos.y - centerY;
-            const c = Math.sqrt(a * a + b * b);
-            if (c === 0) return;
-
-            const speed = 10;
-            const sX = speed * a / c;
-            const sY = speed * b / c;
-            const col = colors[Math.floor(Math.random() * colors.length)];
-
-            bullets.push({
-                x: centerX,
-                y: centerY,
-                sX: sX,
-                sY: sY,
-                color: col
+            // Desenha bolhas
+            bubbles.filter(b => b.active).forEach(b => {
+                ctx.fillStyle = b.color;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, RADIUS, 0, Math.PI * 2);
+                ctx.fill();
             });
 
-            // Vibração no Telegram
+            // Desenha bolha no canhão
+            if (shooterBubble && shooterBubble.vx === 0) {
+                ctx.fillStyle = shooterBubble.color;
+                ctx.beginPath();
+                ctx.arc(shooterBubble.x, shooterBubble.y, RADIUS, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Mira (linha)
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(shooterBubble.x, shooterBubble.y);
+                ctx.lineTo(shooterBubble.x + Math.cos(angle) * 100, shooterBubble.y + Math.sin(angle) * 100);
+                ctx.stroke();
+            }
+
+            // Pontuação
+            ctx.fillStyle = 'white';
+            ctx.font = '30px Arial';
+            ctx.fillText(`Pontos: ${score}`, 20, 50);
+
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '50px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2 - 50);
+                ctx.font = '30px Arial';
+                ctx.fillText(`Pontuação Final: ${score}`, canvas.width / 2, canvas.height / 2 + 50);
+            }
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            if (shooterBubble.vx !== 0 || shooterBubble.vy !== 0) {
+                shooterBubble.x += shooterBubble.vx;
+                shooterBubble.y += shooterBubble.vy;
+
+                // Colisão com paredes
+                if (shooterBubble.x - RADIUS < WALL || shooterBubble.x + RADIUS > canvas.width - WALL) {
+                    shooterBubble.vx *= -1;
+                }
+
+                // Colisão com topo
+                if (shooterBubble.y - RADIUS < WALL) {
+                    snapBubble();
+                }
+
+                // Colisão com outras bolhas
+                for (let b of bubbles) {
+                    if (b.active && Math.hypot(shooterBubble.x - b.x, shooterBubble.y - b.y) < RADIUS * 2) {
+                        snapBubble();
+                        break;
+                    }
+                }
+
+                // Game over se passar do fundo
+                if (shooterBubble.y > canvas.height) {
+                    gameOver = true;
+                }
+            }
+
+            // Verifica se alguma bolha chegou ao fundo
+            if (bubbles.some(b => b.active && b.y + RADIUS > canvas.height - WALL)) {
+                gameOver = true;
+            }
+        }
+
+        function snapBubble() {
+            // Encontra posição mais próxima na grade
+            let closest = null;
+            let minDist = Infinity;
+            const testRow = Math.round((shooterBubble.y - WALL - RADIUS) / ROW_HEIGHT);
+            const cols = testRow % 2 === 0 ? 10 : 9;
+
+            for (let col = 0; col < cols; col++) {
+                const testX = WALL + col * GRID_SIZE + (testRow % 2 === 1 ? GRID_SIZE / 2 : 0) + RADIUS;
+                const testY = WALL + testRow * ROW_HEIGHT + RADIUS;
+                const dist = Math.hypot(shooterBubble.x - testX, shooterBubble.y - testY);
+                const occupied = bubbles.some(b => b.active && b.row === testRow && b.col === col);
+                if (dist < minDist && !occupied) {
+                    minDist = dist;
+                    closest = { row: testRow, col };
+                }
+            }
+
+            if (closest) {
+                createBubble(closest.row, closest.col, shooterBubble.color);
+                checkMatches();
+                createShooterBubble();
+            } else {
+                gameOver = true;
+            }
+        }
+
+        function checkMatches() {
+            // Encontra clusters (flood fill simples)
+            const visited = new Set();
+            let totalPopped = 0;
+
+            for (let b of bubbles) {
+                if (!b.active || visited.has(b)) continue;
+
+                const cluster = [];
+                const queue = [b];
+                visited.add(b);
+
+                while (queue.length) {
+                    const current = queue.pop();
+                    cluster.push(current);
+
+                    // Vizinhos (aproximado para hex)
+                    const neighbors = bubbles.filter(n => n.active && !visited.has(n) &&
+                        Math.hypot(n.x - current.x, n.y - current.y) < GRID_SIZE);
+
+                    for (let n of neighbors) {
+                        if (n.color === b.color) {
+                            queue.push(n);
+                            visited.add(n);
+                        }
+                    }
+                }
+
+                if (cluster.length >= 3) {
+                    cluster.forEach(c => c.active = false);
+                    totalPopped += cluster.length;
+                }
+            }
+
+            if (totalPopped > 0) {
+                score += totalPopped * 10;
+                dropFloating();
+            }
+        }
+
+        function dropFloating() {
+            // Bolhas conectadas ao topo ficam, outras caem (simplificado)
+            const connected = new Set();
+            const topBubbles = bubbles.filter(b => b.active && b.row === 0);
+            const queue = [...topBubbles];
+
+            while (queue.length) {
+                const current = queue.pop();
+                if (connected.has(current)) continue;
+                connected.add(current);
+
+                const neighbors = bubbles.filter(n => n.active && Math.hypot(n.x - current.x, n.y - current.y) < GRID_SIZE);
+                queue.push(...neighbors);
+            }
+
+            const dropped = bubbles.filter(b => b.active && !connected.has(b));
+            dropped.forEach(b => b.active = false);
+            score += dropped.length * 20;
+        }
+
+        function handleAim(e) {
+            if (gameOver) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+            const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+            angle = Math.atan2(y - shooterBubble.y, x - shooterBubble.x);
+        }
+
+        function shoot(e) {
+            if (gameOver || shooterBubble.vx !== 0) return;
+            const speed = 12;
+            shooterBubble.vx = speed * Math.cos(angle);
+            shooterBubble.vy = speed * Math.sin(angle);
+
             if (typeof Telegram !== 'undefined' && Telegram.WebApp.HapticFeedback) {
                 Telegram.WebApp.HapticFeedback.impactOccurred('medium');
             }
         }
 
-        canvas.onmousedown = canvas.ontouchstart = shoot;
+        canvas.addEventListener('mousemove', handleAim);
+        canvas.addEventListener('touchmove', handleAim);
+        canvas.addEventListener('click', shoot);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); shoot(e); handleAim(e); });
 
-        // Adiciona bolas
-        setInterval(() => {
-            const col = colors[Math.floor(Math.random() * colors.length)];
-            balls.push({
-                x: centerX,
-                y: 0,
-                r: 200,
-                num: 0,
-                startX: centerX,
-                startY: 0,
-                color: col
-            });
-        }, 1500);
-
-        // Desenho e animação
-        function draw() {
-            oGC.clearRect(0, 0, width, height);
-
-            // Caminho (curva)
-            oGC.strokeStyle = '#335533';
-            oGC.lineWidth = 50;
-            oGC.beginPath();
-            oGC.arc(centerX, centerY, 220, -90 * hDu, 180 * hDu, false);
-            oGC.stroke();
-            oGC.beginPath();
-            oGC.arc(centerX - 50, centerY, 150, 180 * hDu, 360 * hDu, false);
-            oGC.stroke();
-
-            // Buraco final
-            oGC.fillStyle = 'black';
-            oGC.beginPath();
-            oGC.arc(centerX + 150, centerY, 40, 0, Math.PI * 2);
-            oGC.fill();
-
-            // Bolas
-            for (let i = 0; i < balls.length; i++) {
-                oGC.fillStyle = balls[i].color;
-                oGC.beginPath();
-                oGC.arc(balls[i].x, balls[i].y, 20, 0, Math.PI * 2);
-                oGC.fill();
-            }
-
-            // Sapo
-            oGC.save();
-            oGC.translate(centerX, centerY);
-            oGC.rotate(iRotate);
-            // Corpo
-            oGC.fillStyle = '#228B22';
-            oGC.beginPath();
-            oGC.ellipse(0, 10, 40, 30, 0, 0, Math.PI * 2);
-            oGC.fill();
-            // Cabeça
-            oGC.fillStyle = '#32CD32';
-            oGC.beginPath();
-            oGC.arc(0, 0, 35, 0, Math.PI * 2);
-            oGC.fill();
-            // Olhos
-            oGC.fillStyle = 'white';
-            oGC.beginPath();
-            oGC.arc(-12, -10, 10, 0, Math.PI * 2);
-            oGC.arc(12, -10, 10, 0, Math.PI * 2);
-            oGC.fill();
-            oGC.fillStyle = 'black';
-            oGC.beginPath();
-            oGC.arc(-12, -10, 5, 0, Math.PI * 2);
-            oGC.arc(12, -10, 5, 0, Math.PI * 2);
-            oGC.fill();
-            // Boca
-            oGC.strokeStyle = 'black';
-            oGC.lineWidth = 3;
-            oGC.beginPath();
-            oGC.arc(0, 10, 20, 0, Math.PI, false);
-            oGC.stroke();
-            oGC.restore();
-
-            // Projéteis
-            for (let i = 0; i < bullets.length; i++) {
-                oGC.fillStyle = bullets[i].color;
-                oGC.beginPath();
-                oGC.arc(bullets[i].x, bullets[i].y, 20, 0, Math.PI * 2);
-                oGC.fill();
-            }
-
-            // Pontuação
-            oGC.fillStyle = 'white';
-            oGC.font = '30px Arial';
-            oGC.fillText('Pontos: ' + score, 20, 50);
-            oGC.fillText('Zuma Simples', width / 2 - 100, height - 20);
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
         }
 
-        // Movimento e colisão
-        setInterval(() => {
-            // Mover bolas
-            for (let i = 0; i < balls.length; i++) {
-                balls[i].num++;
-                if (balls[i].num === 270) {
-                    balls[i].r = 150;
-                    balls[i].startX = centerX - 50;
-                    balls[i].startY = centerY - 150;
-                }
-                if (balls[i].num >= 450) {
-                    alert('Game Over!\nPontos finais: ' + score);
-                    location.reload();
-                }
-                balls[i].x = Math.sin(balls[i].num * hDu) * balls[i].r + balls[i].startX;
-                balls[i].y = balls[i].r - Math.cos(balls[i].num * hDu) * balls[i].r + balls[i].startY;
-            }
-
-            // Mover projéteis
-            for (let i = bullets.length - 1; i >= 0; i--) {
-                bullets[i].x += bullets[i].sX;
-                bullets[i].y += bullets[i].sY;
-
-                // Colisão com bolas
-                for (let j = balls.length - 1; j >= 0; j--) {
-                    const dx = bullets[i].x - balls[j].x;
-                    const dy = bullets[i].y - balls[j].y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 40) {
-                        if (bullets[i].color === balls[j].color) {
-                            balls.splice(j, 1);
-                            score += 20;
-                        }
-                        bullets.splice(i, 1);
-                        break;
-                    }
-                }
-            }
-        }, 30);
-
-        setInterval(draw, 1000 / 60);
+        loop();
     </script>
 </body>
 </html>
