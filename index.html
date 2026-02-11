@@ -3,126 +3,117 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Boneco dos Peidos 😂</title>
+    <title>TV Aberta Brasil Ao Vivo</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
-        }
-        #title {
-            font-size: 2em;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            margin-bottom: 20px;
-        }
-        #boneco {
-            font-size: 20em; /* Muito grande */
+        body { margin: 0; padding: 0; background: #111; color: white; font-family: Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        #list { flex: 1; overflow-y: auto; padding: 20px; }
+        .channel {
+            background: #222;
+            margin: 10px 0;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 1.5em;
             cursor: pointer;
-            user-select: none;
-            transition: transform 0.1s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            transition: transform 0.2s;
         }
-        #boneco:active {
-            transform: scale(0.95);
-        }
-        #contador {
+        .channel:hover { transform: scale(1.05); }
+        #player-container { display: none; flex-direction: column; height: 100vh; background: black; }
+        #video { width: 100%; height: 100%; background: black; }
+        #back-btn {
             position: absolute;
             top: 20px;
-            font-size: 1.5em;
-            color: white;
-            background: rgba(0,0,0,0.3);
+            left: 20px;
             padding: 10px 20px;
-            border-radius: 20px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            border-radius: 10px;
+            font-size: 1em;
+            cursor: pointer;
+            z-index: 10;
         }
-        @keyframes shake {
-            0% { transform: translate(0); }
-            25% { transform: translate(-10px, 10px); }
-            50% { transform: translate(10px, -10px); }
-            75% { transform: translate(-10px, -10px); }
-            100% { transform: translate(0); }
-        }
-        .shake {
-            animation: shake 0.5s;
-        }
+        #header { text-align: center; padding: 20px; background: #333; font-size: 1.8em; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 2em; }
     </style>
 </head>
 <body>
-    <div id="contador">Peidos soltos: <span id="count">0</span></div>
-    <div id="title">Toque no boneco! 💨</div>
-    <div id="boneco">🧔</div>
+    <div id="header">TV Aberta Brasil Ao Vivo 📺</div>
+    <div id="list">
+        <div class="channel" data-url="http://nimblestream2.canais.link/hls1/bobosp.m3u8">Globo SP</div>
+        <div class="channel" data-url="https://nimblestream2.canais.link/hls1/boborj.m3u8">Globo RJ</div>
+        <div class="channel" data-url="https://playplusbh-lh.akamaihd.net/i/pp_bh@377862/master.m3u8">Record TV</div>
+        <div class="channel" data-url="http://evpp.mm.uol.com.br:1935/redetv1/redetv1/playlist.m3u8">RedeTV!</div>
+        <div class="channel" data-url="https://evtg.mm.uol.com.br/geobband/operadoras/playlist.m3u8">Band</div>
+        <div class="channel" data-url="https://cdn.jmvstream.com/w/LVW-8403/LVW8403_bIBvekk9QA/playlist.m3u8">TV Cultura</div>
+        <div class="channel" data-url="https://tvbrasil-stream.ebc.com.br/index.m3u8">TV Brasil (Oficial)</div>
+    </div>
+
+    <div id="player-container">
+        <button id="back-btn">← Voltar</button>
+        <video id="video" controls autoplay playsinline></video>
+        <div id="loading">Carregando... 📡</div>
+    </div>
 
     <script>
-        // Telegram Mini App (tela cheia + vibração)
         if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
         }
 
-        const boneco = document.getElementById('boneco');
-        const countEl = document.getElementById('count');
-        let count = 0;
+        const list = document.getElementById('list');
+        const playerContainer = document.getElementById('player-container');
+        const video = document.getElementById('video');
+        const backBtn = document.getElementById('back-btn');
+        const loading = document.getElementById('loading');
+        let hls;
 
-        // Array com variações de peidos (diferentes frequências, durações e tipos de onda)
-        const peidos = [
-            { freqStart: 180, freqEnd: 60, duration: 0.6, type: 'sawtooth', volume: 0.8 },  // Peido longo e grave
-            { freqStart: 250, freqEnd: 80, duration: 0.4, type: 'square', volume: 1 },      // Peido curto e agudo
-            { freqStart: 150, freqEnd: 40, duration: 1.0, type: 'sawtooth', volume: 0.7 }, // Peido bem longo
-            { freqStart: 300, freqEnd: 100, duration: 0.3, type: 'triangle', volume: 0.9 },// Peido rápido
-            { freqStart: 200, freqEnd: 50, duration: 0.7, type: 'sine', volume: 0.6 },     // Peido "molhado"
-            { freqStart: 220, freqEnd: 70, duration: 0.5, type: 'square', volume: 1 },     // Peido clássico
-            { freqStart: 170, freqEnd: 30, duration: 0.8, type: 'sawtooth', volume: 0.85 } // Peido épico
-        ];
+        document.querySelectorAll('.channel').forEach(channel => {
+            channel.addEventListener('click', () => {
+                const url = channel.dataset.url;
+                list.style.display = 'none';
+                playerContainer.style.display = 'flex';
+                loading.style.display = 'block';
+                video.style.display = 'none';
 
-        function playRandomFart() {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const randomPeido = peidos[Math.floor(Math.random() * peidos.length)];
+                if (hls) hls.destroy();
 
-            const oscillator = audioCtx.createOscillator();
-            oscillator.type = randomPeido.type;
-            oscillator.frequency.setValueAtTime(randomPeido.freqStart, audioCtx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(randomPeido.freqEnd, audioCtx.currentTime + randomPeido.duration);
+                if (Hls.isSupported()) {
+                    hls = new Hls();
+                    hls.loadSource(url);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        video.play();
+                        loading.style.display = 'none';
+                        video.style.display = 'block';
+                    });
+                    hls.on(Hls.Events.ERROR, (event, data) => {
+                        console.error(data);
+                        loading.textContent = 'Erro ao carregar 😢 Tente outro canal';
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = url;
+                    video.addEventListener('loadedmetadata', () => {
+                        video.play();
+                        loading.style.display = 'none';
+                        video.style.display = 'block';
+                    });
+                } else {
+                    loading.textContent = 'Seu dispositivo não suporta HLS 😢';
+                }
+            });
+        });
 
-            const gain = audioCtx.createGain();
-            gain.gain.setValueAtTime(randomPeido.volume, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + randomPeido.duration);
-
-            oscillator.connect(gain);
-            gain.connect(audioCtx.destination);
-
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + randomPeido.duration);
-
-            // Vibração no Telegram
-            if (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.HapticFeedback) {
-                Telegram.WebApp.HapticFeedback.impactOccurred('heavy');
-            }
-        }
-
-        function tocarBoneco() {
-            count++;
-            countEl.textContent = count;
-
-            // Animação de tremor
-            boneco.classList.add('shake');
-            setTimeout(() => boneco.classList.remove('shake'), 500);
-
-            // Toca um peido diferente a cada vez
-            playRandomFart();
-        }
-
-        // Suporte a toque e clique
-        boneco.addEventListener('click', tocarBoneco);
-        boneco.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            tocarBoneco();
+        backBtn.addEventListener('click', () => {
+            if (hls) hls.destroy();
+            video.pause();
+            video.src = '';
+            playerContainer.style.display = 'none';
+            list.style.display = 'block';
+            loading.style.display = 'block';
         });
     </script>
 </body>
