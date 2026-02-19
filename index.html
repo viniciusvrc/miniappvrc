@@ -1,120 +1,147 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TV Aberta Brasil Ao Vivo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TopChat - Grupos em Destaque</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { margin: 0; padding: 0; background: #111; color: white; font-family: Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; }
-        #list { flex: 1; overflow-y: auto; padding: 20px; }
-        .channel {
-            background: #222;
-            margin: 10px 0;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0a;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            padding-bottom: 80px;
+        }
+        .header {
+            background: linear-gradient(135deg, #00d4ff, #0077ff);
             padding: 20px;
-            border-radius: 15px;
             text-align: center;
-            font-size: 1.5em;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-            transition: transform 0.2s;
+            font-size: 24px;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
-        .channel:hover { transform: scale(1.05); }
-        #player-container { display: none; flex-direction: column; height: 100vh; background: black; }
-        #video { width: 100%; height: 100%; background: black; }
-        #back-btn {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            padding: 10px 20px;
-            background: rgba(255,255,255,0.2);
+        .group-list {
+            padding: 15px;
+        }
+        .group-item {
+            background: #1a1a1a;
+            margin: 12px 0;
+            border-radius: 16px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            padding: 14px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .group-photo {
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-right: 16px;
+            border: 3px solid #00d4ff;
+        }
+        .group-info {
+            flex: 1;
+        }
+        .group-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .group-date {
+            font-size: 13px;
+            color: #888;
+        }
+        .enter-btn {
+            background: #00d4ff;
+            color: #000;
             border: none;
-            color: white;
-            border-radius: 10px;
-            font-size: 1em;
-            cursor: pointer;
-            z-index: 10;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 15px;
         }
-        #header { text-align: center; padding: 20px; background: #333; font-size: 1.8em; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 2em; }
+        .no-groups {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+            font-size: 18px;
+        }
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #111;
+            text-align: center;
+            padding: 12px;
+            font-size: 14px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
-    <div id="header">TV Aberta Brasil Ao Vivo 📺</div>
-    <div id="list">
-        <div class="channel" data-url="http://nimblestream2.canais.link/hls1/bobosp.m3u8">Globo SP</div>
-        <div class="channel" data-url="https://nimblestream2.canais.link/hls1/boborj.m3u8">Globo RJ</div>
-        <div class="channel" data-url="https://playplusbh-lh.akamaihd.net/i/pp_bh@377862/master.m3u8">Record TV</div>
-        <div class="channel" data-url="http://evpp.mm.uol.com.br:1935/redetv1/redetv1/playlist.m3u8">RedeTV!</div>
-        <div class="channel" data-url="https://evtg.mm.uol.com.br/geobband/operadoras/playlist.m3u8">Band</div>
-        <div class="channel" data-url="https://cdn.jmvstream.com/w/LVW-8403/LVW8403_bIBvekk9QA/playlist.m3u8">TV Cultura</div>
-        <div class="channel" data-url="https://tvbrasil-stream.ebc.com.br/index.m3u8">TV Brasil (Oficial)</div>
+    <div class="header">🌟 TopChat - Grupos em Destaque</div>
+    
+    <div class="group-list" id="groupList">
+        <div class="no-groups">Carregando grupos divulgados...</div>
     </div>
 
-    <div id="player-container">
-        <button id="back-btn">← Voltar</button>
-        <video id="video" controls autoplay playsinline></video>
-        <div id="loading">Carregando... 📡</div>
+    <div class="footer">
+        Powered by ModeradorBot • Atualiza automaticamente
     </div>
 
     <script>
-        if (typeof Telegram !== 'undefined' && Telegram.WebApp) {
-            Telegram.WebApp.ready();
-            Telegram.WebApp.expand();
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        async function loadGroups() {
+            const container = document.getElementById('groupList');
+            
+            try {
+                // Carrega o arquivo JSON gerado pelo bot
+                const response = await fetch('https://viniciusvrc.github.io/miniappvrc/groups.json');
+                const groups = await response.json();
+
+                container.innerHTML = '';
+
+                if (groups.length === 0) {
+                    container.innerHTML = `<div class="no-groups">Nenhum grupo está sendo divulgado no momento.</div>`;
+                    return;
+                }
+
+                groups.forEach(group => {
+                    const div = document.createElement('div');
+                    div.className = 'group-item';
+                    div.innerHTML = `
+                        <img src="${group.photo || 'https://i.imgur.com/8z7vKzP.png'}" 
+                             class="group-photo" 
+                             onerror="this.src='https://i.imgur.com/8z7vKzP.png'">
+                        <div class="group-info">
+                            <div class="group-name">${group.title}</div>
+                            <div class="group-date">Divulgado há ${group.time_ago}</div>
+                        </div>
+                        <button class="enter-btn" onclick="openGroup('${group.link}')">Entrar</button>
+                    `;
+                    container.appendChild(div);
+                });
+
+            } catch (err) {
+                container.innerHTML = `<div class="no-groups">Erro ao carregar. Tente novamente mais tarde.</div>`;
+            }
         }
 
-        const list = document.getElementById('list');
-        const playerContainer = document.getElementById('player-container');
-        const video = document.getElementById('video');
-        const backBtn = document.getElementById('back-btn');
-        const loading = document.getElementById('loading');
-        let hls;
+        function openGroup(link) {
+            tg.openLink(link);
+        }
 
-        document.querySelectorAll('.channel').forEach(channel => {
-            channel.addEventListener('click', () => {
-                const url = channel.dataset.url;
-                list.style.display = 'none';
-                playerContainer.style.display = 'flex';
-                loading.style.display = 'block';
-                video.style.display = 'none';
-
-                if (hls) hls.destroy();
-
-                if (Hls.isSupported()) {
-                    hls = new Hls();
-                    hls.loadSource(url);
-                    hls.attachMedia(video);
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                        video.play();
-                        loading.style.display = 'none';
-                        video.style.display = 'block';
-                    });
-                    hls.on(Hls.Events.ERROR, (event, data) => {
-                        console.error(data);
-                        loading.textContent = 'Erro ao carregar 😢 Tente outro canal';
-                    });
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = url;
-                    video.addEventListener('loadedmetadata', () => {
-                        video.play();
-                        loading.style.display = 'none';
-                        video.style.display = 'block';
-                    });
-                } else {
-                    loading.textContent = 'Seu dispositivo não suporta HLS 😢';
-                }
-            });
-        });
-
-        backBtn.addEventListener('click', () => {
-            if (hls) hls.destroy();
-            video.pause();
-            video.src = '';
-            playerContainer.style.display = 'none';
-            list.style.display = 'block';
-            loading.style.display = 'block';
-        });
+        // Carrega ao abrir o Mini App
+        window.onload = loadGroups;
     </script>
 </body>
 </html>
